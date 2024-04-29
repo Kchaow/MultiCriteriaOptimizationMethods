@@ -5,27 +5,31 @@ import copy
 import re
 
 
-def get_grad_in_point_as_expr(expr, point):
+def get_grad_in_point_as_expr(expr_param, point):
     grad = sympify(0)
-    variables = list(expr.atoms(Symbol))
+    variables = list(expr_param.atoms(Symbol))
     for i in range(0, len(variables)):
         variable = variables[i]
-        derivative = diff(expr, variable)
+        derivative = diff(expr_param, variable)
+        #Подставить все переменные, а не только одну
         grad = grad + derivative.subs(variable, point[i]) * variable
     return grad
 
 
-def get_a_for_frank_wolfe(expr, h, xk):
+def get_a_for_frank_wolfe(expr_param, h, xk):
     a = symbols('a')
     a_vec = np.array([])
     for i in range(0, len(h)):
         a_vec = np.append(a_vec, xk[i] + h[i] * a)
-    expr_with_a = copy.deepcopy(expr)
+    expr_with_a = copy.deepcopy(expr_param)
     expr_variables = list(expr_with_a.atoms(Symbol))
     for i in range(0, len(expr_variables)):
         criteria_ind = int(re.findall("\\d+$", expr_variables[i].name)[0])
         expr_with_a = expr_with_a.subs(expr_variables[i], a_vec[criteria_ind - 1])
     derivative = diff(expr_with_a, a)
+    a_solve = solve(derivative, a)
+    if len(a_solve) == 0:
+        return 0
     a = float(solve(derivative, a)[0])
     if a > 1:
         return 1
@@ -44,21 +48,22 @@ def is_lim_reached(current_x, next_x, min_diff):
         return False
 
 
-def get_max_by_frank_wolfe(expr, A, b, bounds, x0, min_diff):
+def get_min_by_frank_wolfe(expr_param, A_param, b_param, bounds, x0, min_diff):
     current_x = x0
     next_x = np.array([])
     for i in range(0, len(current_x)):
         next_x = np.append(next_x, current_x[i] + min_diff + 1)
 
     while not is_lim_reached(current_x, next_x, min_diff):
-        grad = get_grad_in_point_as_expr(expr, current_x)
+        grad = get_grad_in_point_as_expr(expr_param, current_x)
         grad_coefficients = grad.as_coefficients_dict()
         c = []
         for i in grad_coefficients:
-            c.append(-1 * grad_coefficients[i])
-        linprog_res = linprog(c, A_ub=A, b_ub=b, bounds=bounds, method='highs')
+            coeff_ind = int(re.findall("\\d+$", i)[0])
+            c.append(grad_coefficients[coeff_ind-1])
+        linprog_res = linprog(c, A_ub=A_param, b_ub=b_param, bounds=bounds, method='highs')
         h = np.array(linprog_res.x) - current_x
-        a = get_a_for_frank_wolfe(expr, h, current_x)
+        a = get_a_for_frank_wolfe(expr_param, h, current_x)
         next_x = current_x + a * h
         temp = next_x
         next_x = current_x
@@ -66,9 +71,71 @@ def get_max_by_frank_wolfe(expr, A, b, bounds, x0, min_diff):
     return current_x
 
 
-x1, x2 = symbols('x1 x2')
-expr = 4*x1 + 8*x2 - x1**2 - x2**2
-A = [[1, 1], [1, -1]]
-b = [3, 2]
-print(get_max_by_frank_wolfe(expr, A, b, [(0, None), (0, None)], np.array([0, 0]), 0.01))
+def get_max_by_frank_wolfe(expr_param, A_param, b_param, bounds, x0, min_diff):
+    current_x = x0
+    next_x = np.array([])
+    for i in range(0, len(current_x)):
+        next_x = np.append(next_x, current_x[i] + min_diff + 1)
 
+    while not is_lim_reached(current_x, next_x, min_diff):
+        grad = get_grad_in_point_as_expr(expr_param, current_x)
+        grad_coefficients = grad.as_coefficients_dict()
+        c = []
+        for i in grad_coefficients:
+            c.append(-1 * grad_coefficients[i])
+        linprog_res = linprog(c, A_ub=A_param, b_ub=b_param, bounds=bounds, method='highs')
+        h = np.array(linprog_res.x) - current_x
+        a = get_a_for_frank_wolfe(expr_param, h, current_x)
+        next_x = current_x + a * h
+        temp = next_x
+        next_x = current_x
+        current_x = temp
+    return current_x
+
+
+def get_max_by_utopia_point_method(criteria, A_param, b_param, bounds=((0, None), (0, None)), x0=np.array([0, 0]), min_diff=0.01):
+    utopia_values = np.array([])
+    for i in criteria:
+        c = []
+        coefficients = i.as_coefficients_dict()
+        for j in coefficients:
+            c.append(-1 * coefficients[j])
+        linprog_res = linprog(c, A_ub=A_param, b_ub=b_param, bounds=bounds, method='highs')
+        utopia_values = np.append(utopia_values, -1 * linprog_res.fun)
+    metric_func_expr = sympify(0)
+    for i in range(0, len(criteria)):
+        metric_func_expr += (criteria[i] - utopia_values[i])**2
+    return get_min_by_frank_wolfe(metric_func_expr, A, b, bounds, x0, min_diff)
+
+
+# x1, x2 = symbols('x1 x2')
+# criteria_array = np.array([
+#     x1 + x2,
+#     -3*x1 + x2,
+#     x1 - 3*x2
+# ])
+# A = [[-1, -1],
+#      [1, -2],
+#      [-3, 2],
+#      [1, 0],
+#      [0, 1]]
+# b = [-20, 10, 20, 40, 30]
+# initial_point = np.array([40, 30])
+#
+# print(get_max_by_utopia_point_method(criteria_array, A, b, x0=initial_point))
+
+x1, x2 = symbols('x1 x2')
+criteria_array = np.array([
+    -x1 + 2*x2,
+    2*x1 + x2,
+    x1 - 3*x2
+])
+A = [[1, 1],
+     [-1, 0],
+     [1, 0],
+     [0, -1],
+     [0, 1]]
+b = [6, -1, 3, -1, 4]
+initial_point = np.array([0, 0])
+
+print(get_max_by_utopia_point_method(criteria_array, A, b, x0=initial_point))

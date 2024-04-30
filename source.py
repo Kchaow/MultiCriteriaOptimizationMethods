@@ -7,12 +7,14 @@ import re
 
 def get_grad_in_point_as_expr(expr_param, point):
     grad = sympify(0)
-    variables = list(expr_param.atoms(Symbol))
+    variables = sorted(list(expr_param.atoms(Symbol)), key=lambda sym: sym.name)
+    substitutions = []
+    for i in range(0, len(variables)):
+        substitutions.append((variables[i], point[i]))
     for i in range(0, len(variables)):
         variable = variables[i]
         derivative = diff(expr_param, variable)
-        #Подставить все переменные, а не только одну
-        grad = grad + derivative.subs(variable, point[i]) * variable
+        grad = grad + derivative.subs(substitutions) * variable
     return grad
 
 
@@ -22,10 +24,9 @@ def get_a_for_frank_wolfe(expr_param, h, xk):
     for i in range(0, len(h)):
         a_vec = np.append(a_vec, xk[i] + h[i] * a)
     expr_with_a = copy.deepcopy(expr_param)
-    expr_variables = list(expr_with_a.atoms(Symbol))
+    expr_variables = sorted(list(expr_with_a.atoms(Symbol)), key=lambda sym: sym.name)
     for i in range(0, len(expr_variables)):
-        criteria_ind = int(re.findall("\\d+$", expr_variables[i].name)[0])
-        expr_with_a = expr_with_a.subs(expr_variables[i], a_vec[criteria_ind - 1])
+        expr_with_a = expr_with_a.subs(expr_variables[i], a_vec[i])
     derivative = diff(expr_with_a, a)
     a_solve = solve(derivative, a)
     if len(a_solve) == 0:
@@ -56,11 +57,10 @@ def get_min_by_frank_wolfe(expr_param, A_param, b_param, bounds, x0, min_diff):
 
     while not is_lim_reached(current_x, next_x, min_diff):
         grad = get_grad_in_point_as_expr(expr_param, current_x)
-        grad_coefficients = grad.as_coefficients_dict()
+        grad_coefficients = sorted(grad.as_coefficients_dict().items(), key=lambda item: item[0].name)
         c = []
         for i in grad_coefficients:
-            coeff_ind = int(re.findall("\\d+$", i)[0])
-            c.append(grad_coefficients[coeff_ind-1])
+            c.append(i[1])
         linprog_res = linprog(c, A_ub=A_param, b_ub=b_param, bounds=bounds, method='highs')
         h = np.array(linprog_res.x) - current_x
         a = get_a_for_frank_wolfe(expr_param, h, current_x)
@@ -79,10 +79,10 @@ def get_max_by_frank_wolfe(expr_param, A_param, b_param, bounds, x0, min_diff):
 
     while not is_lim_reached(current_x, next_x, min_diff):
         grad = get_grad_in_point_as_expr(expr_param, current_x)
-        grad_coefficients = grad.as_coefficients_dict()
+        grad_coefficients = sorted(grad.as_coefficients_dict().items(), key=lambda item: item[0].name)
         c = []
         for i in grad_coefficients:
-            c.append(-1 * grad_coefficients[i])
+            c.append(i[1])
         linprog_res = linprog(c, A_ub=A_param, b_ub=b_param, bounds=bounds, method='highs')
         h = np.array(linprog_res.x) - current_x
         a = get_a_for_frank_wolfe(expr_param, h, current_x)
@@ -97,9 +97,9 @@ def get_max_by_utopia_point_method(criteria, A_param, b_param, bounds=((0, None)
     utopia_values = np.array([])
     for i in criteria:
         c = []
-        coefficients = i.as_coefficients_dict()
+        coefficients = sorted(i.as_coefficients_dict().items(), key=lambda item: item[0].name)
         for j in coefficients:
-            c.append(-1 * coefficients[j])
+            c.append(-1 * j[1])
         linprog_res = linprog(c, A_ub=A_param, b_ub=b_param, bounds=bounds, method='highs')
         utopia_values = np.append(utopia_values, -1 * linprog_res.fun)
     metric_func_expr = sympify(0)

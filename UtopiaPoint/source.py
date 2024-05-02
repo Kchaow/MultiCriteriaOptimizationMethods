@@ -1,3 +1,7 @@
+#
+#   Метод идеальной точки через метод Франка-Вульфа
+#
+
 from sympy import *
 from scipy.optimize import linprog
 import numpy as np
@@ -93,7 +97,8 @@ def get_max_by_frank_wolfe(expr_param, A_param, b_param, bounds, x0, min_diff):
     return current_x
 
 
-def get_max_by_utopia_point_method(criteria, A_param, b_param, bounds=((0, None), (0, None)), x0=np.array([0, 0]), min_diff=0.01):
+def get_max_by_utopia_point_method(criteria, A_param, b_param, bounds=((0, None), (0, None)), x0=np.array([0, 0]),
+                                   min_diff=0.01):
     utopia_values = np.array([])
     for i in criteria:
         c = []
@@ -104,7 +109,7 @@ def get_max_by_utopia_point_method(criteria, A_param, b_param, bounds=((0, None)
         utopia_values = np.append(utopia_values, -1 * linprog_res.fun)
     metric_func_expr = sympify(0)
     for i in range(0, len(criteria)):
-        metric_func_expr += (criteria[i] - utopia_values[i])**2
+        metric_func_expr += (criteria[i] - utopia_values[i]) ** 2
     return get_min_by_frank_wolfe(metric_func_expr, A, b, bounds, x0, min_diff)
 
 
@@ -126,9 +131,9 @@ def get_max_by_utopia_point_method(criteria, A_param, b_param, bounds=((0, None)
 
 x1, x2 = symbols('x1 x2')
 criteria_array = np.array([
-    -x1 + 2*x2,
-    2*x1 + x2,
-    x1 - 3*x2
+    -x1 + 2 * x2,
+    2 * x1 + x2,
+    x1 - 3 * x2
 ])
 A = [[1, 1],
      [-1, 0],

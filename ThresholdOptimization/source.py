@@ -34,4 +34,3 @@ main_c = 0
 res = get_max_by_threshold_optimization(c_p, A_p, b_p, other_c_b_p, main_c, bound)
 
 print('Оптимальная точка: ', res.x)
-print('Наибольшее значение: ', -1 * res.fun)
